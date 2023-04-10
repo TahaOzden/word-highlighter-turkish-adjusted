@@ -1,0 +1,79 @@
+C:/Users/taha9\Desktop/ExamAssistant/Kavramlar_1.txt
+
+Option Explicit
+
+Sub HighlightWords()
+
+    Dim strFileName As String
+    Dim fso As Object
+    Dim ts As Object
+    Dim strLine As String
+    Dim arrSearch() As String
+    Dim i As Long, j As Long
+    Dim regEx As New RegExp
+    Dim matches As Object
+    Dim match As Object
+    Dim pattern As String
+    Dim start As Long
+    Dim length As Long
+    Dim highlightRange As Range
+    
+    strFileName = InputBox("Enter the path and file name of the text file containing the words to highlight")
+    
+    ' Check if file exists
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FileExists(strFileName) Then
+        MsgBox "File not found."
+        Exit Sub
+    End If
+    
+    ' Open file for reading
+    Set ts = fso.OpenTextFile(strFileName, 1)
+    
+    ' Read words to highlight from file
+    Do Until ts.AtEndOfStream
+        strLine = ts.ReadLine
+        If strLine <> "" Then
+            arrSearch = Split(strLine, ",")
+            
+            For i = LBound(arrSearch) To UBound(arrSearch)
+                arrSearch(i) = Trim(arrSearch(i))
+            Next i
+            
+            ' Highlight each word or phrase
+            For j = LBound(arrSearch) To UBound(arrSearch)
+                pattern = "\b" & arrSearch(j) & "\b" ' Arama patterni, tam olarak girilen kelimeyle eslesecek sekilde düzenlendi.
+                pattern = Replace(pattern, "c", "[cç]") ' c harfi yerine [cç] kullanilir.
+                pattern = Replace(pattern, "g", "[gg]") ' g harfi yerine [gg] kullanilir.
+                pattern = Replace(pattern, "k", "[k" & ChrW(287) & "]") ' k harfi yerine [k ve yumusak g] kullanilir.
+                pattern = Replace(pattern, "p", "[pg]") ' p harfi yerine [pg] kullanilir.
+                pattern = Replace(pattern, "t", "[tç]") ' t harfi yerine [tç] kullanilir.
+                
+                regEx.pattern = pattern
+                regEx.IgnoreCase = True ' Büyük/küçük harf duyarliligi yoktur.
+                regEx.Global = True
+                
+                Selection.HomeKey Unit:=wdStory
+                
+                Set matches = regEx.Execute(ActiveDocument.Range.Text)
+                
+                If matches.Count = 0 Then
+                    MsgBox "No matches found for " & arrSearch(j)
+                End If
+                
+                For Each match In matches
+                    start = match.FirstIndex
+                    length = match.length
+                    Set highlightRange = ActiveDocument.Range(start, start + length)
+                    highlightRange.HighlightColorIndex = wdYellow
+                Next
+            Next j
+            
+        End If
+    Loop
+    
+    ' Close file
+    ts.Close
+    
+End Sub
+
