@@ -1,15 +1,9 @@
-C:/Users/taha9\Desktop/ExamAssistant/Kavramlar_1.txt
-
 Option Explicit
 
 Sub HighlightWords()
 
-    Dim strFileName As String
-    Dim fso As Object
-    Dim ts As Object
-    Dim strLine As String
-    Dim arrSearch() As String
-    Dim i As Long, j As Long
+    Dim strSearch As String
+    Dim i As Integer
     Dim regEx As New RegExp
     Dim matches As Object
     Dim match As Object
@@ -17,63 +11,104 @@ Sub HighlightWords()
     Dim start As Long
     Dim length As Long
     Dim highlightRange As Range
+    Dim highlightColor As WdColorIndex
+    Dim fd As FileDialog
+    Dim filePath As Variant
+    Dim fileContent As String
+    Dim words() As String
+    Dim word As Variant
     
-    strFileName = InputBox("Enter the path and file name of the text file containing the words to highlight")
+    ' Kullaniciya dosya seçtirme islemi
+    Set fd = Application.FileDialog(msoFileDialogFilePicker)
+    With fd
+        .Title = "Select the file containing the words to highlight"
+        .Filters.Clear
+        .Filters.Add "Text Files", "*.txt"
+        .AllowMultiSelect = False
+        If .Show = True Then
+            filePath = .SelectedItems(1)
+        Else
+            Exit Sub
+        End If
+    End With
     
-    ' Check if file exists
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FileExists(strFileName) Then
-        MsgBox "File not found."
+    ' Dosya içerigini okuma
+    Open filePath For Input As #1
+    fileContent = Input$(LOF(1), #1)
+    Close #1
+    
+    words = Split(fileContent, ",")
+    ' Arama patternini olusturma
+    For i = LBound(words) To UBound(words)
+        strSearch = LTrim(RTrim(words(i)))
+        'strSearch = "bayrak"
+        If strSearch <> "" Then
+            ' Türkçe karakterleri kapsayan bir arama patterni olusturma
+            strSearch = Replace(strSearch, "i", "[i" & ChrW(305) & "]")
+            strSearch = Replace(strSearch, "I", "[I" & ChrW(304) & "]")
+            strSearch = Replace(strSearch, "u", "[uü]")
+            strSearch = Replace(strSearch, "U", "[UÜ]")
+            strSearch = Replace(strSearch, "o", "[oö]")
+            strSearch = Replace(strSearch, "O", "[OÖ]")
+            strSearch = Replace(strSearch, "c", "[cç]")
+            strSearch = Replace(strSearch, "C", "[CÇ]")
+            strSearch = Replace(strSearch, "g", "[g" & ChrW(287) & "]")
+            strSearch = Replace(strSearch, "G", "[G" & ChrW(286) & "]")
+            strSearch = Replace(strSearch, "s", "[s" & ChrW(351) & "]")
+            strSearch = Replace(strSearch, "S", "[S" & ChrW(350) & "]")
+
+        
+        ' Son harfi p, ç, t veya k ise ünsüz yumusamasina ugrar, bu harfler için ayri bir kontrol yapilir
+            If Right(strSearch, 1) = "p" Then
+                strSearch = Left(strSearch, Len(strSearch) - 1) & "[pb]"
+            ElseIf Right(strSearch, 1) = ChrW(231) Then
+                strSearch = Left(strSearch, Len(strSearch) - 1) & "[c" & ChrW(231) & "]"
+            ElseIf Right(strSearch, 1) = "t" Then
+                strSearch = Left(strSearch, Len(strSearch) - 1) & "[td]"
+            ElseIf Right(strSearch, 1) = "k" Then
+                strSearch = Left(strSearch, Len(strSearch) - 1) & "[k" & "g" & ChrW(287) & "]"
+            End If
+                pattern = pattern & "\b\w*" & strSearch & "\w*\b" ' Arama patterni, kelimenin gectigi yerlerle eslesecek sekilde düzenlendi.
+                pattern = pattern & "|"
+        End If
+    Next i
+    
+     'Son karakteri '|' olan pattern stringinden '|' karakterini kaldirma
+    If pattern <> "" Then
+        pattern = Left(pattern, Len(pattern) - 1)
+    End If
+    
+    If pattern = "" Then
+        MsgBox "No search words found in the file."
         Exit Sub
     End If
     
-    ' Open file for reading
-    Set ts = fso.OpenTextFile(strFileName, 1)
+    regEx.pattern = pattern
+    regEx.IgnoreCase = True ' Büyük/küçük harf duyarliligi yoktur.
+    regEx.Global = True
     
-    ' Read words to highlight from file
-    Do Until ts.AtEndOfStream
-        strLine = ts.ReadLine
-        If strLine <> "" Then
-            arrSearch = Split(strLine, ",")
-            
-            For i = LBound(arrSearch) To UBound(arrSearch)
-                arrSearch(i) = Trim(arrSearch(i))
-            Next i
-            
-            ' Highlight each word or phrase
-            For j = LBound(arrSearch) To UBound(arrSearch)
-                pattern = "\b" & arrSearch(j) & "\b" ' Arama patterni, tam olarak girilen kelimeyle eslesecek sekilde düzenlendi.
-                pattern = Replace(pattern, "c", "[cç]") ' c harfi yerine [cç] kullanilir.
-                pattern = Replace(pattern, "g", "[gg]") ' g harfi yerine [gg] kullanilir.
-                pattern = Replace(pattern, "k", "[k" & ChrW(287) & "]") ' k harfi yerine [k ve yumusak g] kullanilir.
-                pattern = Replace(pattern, "p", "[pg]") ' p harfi yerine [pg] kullanilir.
-                pattern = Replace(pattern, "t", "[tç]") ' t harfi yerine [tç] kullanilir.
-                
-                regEx.pattern = pattern
-                regEx.IgnoreCase = True ' Büyük/küçük harf duyarliligi yoktur.
-                regEx.Global = True
-                
-                Selection.HomeKey Unit:=wdStory
-                
-                Set matches = regEx.Execute(ActiveDocument.Range.Text)
-                
-                If matches.Count = 0 Then
-                    MsgBox "No matches found for " & arrSearch(j)
-                End If
-                
-                For Each match In matches
-                    start = match.FirstIndex
-                    length = match.length
-                    Set highlightRange = ActiveDocument.Range(start, start + length)
-                    highlightRange.HighlightColorIndex = wdYellow
-                Next
-            Next j
-            
-        End If
-    Loop
+    Selection.HomeKey Unit:=wdStory
     
-    ' Close file
-    ts.Close
+    Set matches = regEx.Execute(ActiveDocument.Range.Text)
     
-End Sub
+    If matches.Count = 0 Then
+        MsgBox "No matches found for the search words in the document."
+        Exit Sub
+    End If
 
+    For Each match In matches
+        start = match.FirstIndex
+        length = match.length
+        Set highlightRange = ActiveDocument.Range(start, start + length)
+        highlightColor = highlightRange.HighlightColorIndex
+        
+        If highlightColor = wdYellow Then
+            highlightRange.HighlightColorIndex = wdNoHighlight
+        Else
+            highlightRange.HighlightColorIndex = wdYellow
+        End If
+    Next
+
+    MsgBox "Total match count is " & matches.Count
+
+End Sub
