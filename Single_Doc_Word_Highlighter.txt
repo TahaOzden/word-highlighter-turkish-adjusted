@@ -3,7 +3,8 @@ Option Explicit
 Sub HighlightWords()
 
     Dim strSearch As String
-    Dim i As Integer
+    Dim trimmedWord As String
+    Dim i As Long
     Dim regEx As New RegExp
     Dim matches As Object
     Dim match As Object
@@ -17,30 +18,44 @@ Sub HighlightWords()
     Dim fileContent As String
     Dim words() As String
     Dim word As Variant
+    Dim totalIndividualMatchCount As Long
+    Dim totalMatchCount As Long
+    Dim individualMatchCount As Long
+    Dim individualMsg As String
+    Dim resultMsg As String
+    Dim docName As String
+    Dim resultFilePath As String
     
     ' Kullaniciya dosya seçtirme islemi
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
     With fd
-        .Title = "Select the file containing the words to highlight"
+        .Title = "Select the file(s) containing the words to highlight"
         .Filters.Clear
         .Filters.Add "Text Files", "*.txt"
-        .AllowMultiSelect = False
+        .AllowMultiSelect = True
         If .Show = True Then
-            filePath = .SelectedItems(1)
+            ' Dosya içerigini birlestirme
+            For Each filePath In .SelectedItems
+                'Dosya icerigini okuma
+                Open filePath For Input As #1
+                fileContent = fileContent & Input$(LOF(1), #1)
+                Close #1
+                Next filePath
         Else
             Exit Sub
         End If
     End With
     
     ' Dosya içerigini okuma
-    Open filePath For Input As #1
-    fileContent = Input$(LOF(1), #1)
-    Close #1
+    'Open filePath For Input As #1
+    'fileContent = Input$(LOF(1), #1)
+    'Close #1
     
     words = Split(fileContent, ",")
     ' Arama patternini olusturma
     For i = LBound(words) To UBound(words)
-        strSearch = LTrim(RTrim(words(i)))
+        trimmedWord = LTrim(RTrim(words(i)))
+        strSearch = trimmedWord
         'strSearch = "bayrak"
         If strSearch <> "" Then
             ' Türkçe karakterleri kapsayan bir arama patterni olusturma
@@ -68,47 +83,51 @@ Sub HighlightWords()
             ElseIf Right(strSearch, 1) = "k" Then
                 strSearch = Left(strSearch, Len(strSearch) - 1) & "[k" & "g" & ChrW(287) & "]"
             End If
-                pattern = pattern & "\b\w*" & strSearch & "\w*\b" ' Arama patterni, kelimenin gectigi yerlerle eslesecek sekilde düzenlendi.
-                pattern = pattern & "|"
+                pattern = "\b\w*" & strSearch & "\w*\b" ' Arama patterni, kelimenin gectigi yerlerle eslesecek sekilde düzenlendi.
+                
+            ' Ilgili kelime için regEx objesi olusturma
+            regEx.pattern = pattern
+            regEx.IgnoreCase = True ' Büyük/küçük harf duyarliligi yoktur.
+            regEx.Global = True
+            ' Ilgili kelimeyi belirginlestirmek için eslesmeleri bulma
+            Set matches = regEx.Execute(ActiveDocument.Range.Text)
+            individualMatchCount = matches.Count
+            
+            If individualMatchCount <> 0 Then
+                totalIndividualMatchCount = totalIndividualMatchCount + 1
+                totalMatchCount = totalMatchCount + individualMatchCount
+                individualMsg = individualMsg & trimmedWord & ": " & individualMatchCount & vbNewLine
+            End If
+            ' Eslesmeleri belirginlestir
+            For Each match In matches
+                
+                start = match.FirstIndex
+                length = match.length
+                Set highlightRange = ActiveDocument.Range(start, start + length)
+                highlightColor = highlightRange.HighlightColorIndex
+        
+                If highlightColor = wdYellow Then
+                    highlightRange.HighlightColorIndex = wdNoHighlight
+                Else
+                    highlightRange.HighlightColorIndex = wdYellow
+                End If
+            Next
         End If
     Next i
     
-     'Son karakteri '|' olan pattern stringinden '|' karakterini kaldirma
-    If pattern <> "" Then
-        pattern = Left(pattern, Len(pattern) - 1)
-    End If
+    ' Mesaji olustur
+    resultMsg = individualMsg & "Toplam tekil kelime: " & totalIndividualMatchCount & vbNewLine
+    resultMsg = resultMsg & "Toplam kelime: " & totalMatchCount
     
-    If pattern = "" Then
-        MsgBox "No search words found in the file."
-        Exit Sub
-    End If
+    MsgBox resultMsg
     
-    regEx.pattern = pattern
-    regEx.IgnoreCase = True ' Büyük/küçük harf duyarliligi yoktur.
-    regEx.Global = True
-    
-    Selection.HomeKey Unit:=wdStory
-    
-    Set matches = regEx.Execute(ActiveDocument.Range.Text)
-    
-    If matches.Count = 0 Then
-        MsgBox "No matches found for the search words in the document."
-        Exit Sub
-    End If
+    ' Sonuclari dosyaya yazma
+    docName = Left(ActiveDocument.Name, InStrRev(ActiveDocument.Name, ".") - 1)
 
-    For Each match In matches
-        start = match.FirstIndex
-        length = match.length
-        Set highlightRange = ActiveDocument.Range(start, start + length)
-        highlightColor = highlightRange.HighlightColorIndex
-        
-        If highlightColor = wdYellow Then
-            highlightRange.HighlightColorIndex = wdNoHighlight
-        Else
-            highlightRange.HighlightColorIndex = wdYellow
-        End If
-    Next
+    resultFilePath = docName & "_search_results.txt"
+    Open resultFilePath For Output As #2
+    Print #2, resultMsg
+    Close #2
 
-    MsgBox "Total match count is " & matches.Count
 
 End Sub
